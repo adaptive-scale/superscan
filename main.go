@@ -12,7 +12,6 @@ func main() {
 	// Define command line flags
 	sourceTypeStr := flag.String("source-type", "filesystem", "Type of source (filesystem|gdrive|s3|gcs)")
 	startPath := flag.String("start-path", "/", "Starting path for scanning (default: /)")
-	onlyTree := flag.Bool("only-tree", false, "Only show directory tree structure")
 	showVersion := flag.Bool("version", false, "Show version information")
 
 	// Parse the flags
@@ -22,11 +21,6 @@ func main() {
 	if *showVersion {
 		PrintVersion()
 		os.Exit(0)
-	}
-
-	if *onlyTree {
-		fmt.Println("Only tree mode is not implemented yet")
-		os.Exit(1)
 	}
 
 	// Parse source type
