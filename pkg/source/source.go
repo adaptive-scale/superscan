@@ -2,7 +2,10 @@ package source
 
 import (
 	"fmt"
+	"os"
 
+	"github.com/adaptive-scale/superscan/pkg/config"
+	"github.com/adaptive-scale/superscan/pkg/logger"
 )
 
 // SourceType represents the type of source to scan
@@ -19,9 +22,10 @@ const (
 	GoogleStorage SourceType = "gcs"
 )
 
-// Source defines the interface for different source types
+// Source defines the interface for different storage backends
 type Source interface {
 	ListFiles(startPath string) error
+	GetName() string
 }
 
 // Set validates and sets the source type
@@ -41,17 +45,22 @@ func (st SourceType) String() string {
 }
 
 // NewSource creates a new source based on the source type
-func NewSource(sourceType SourceType) (Source, error) {
+func NewSource(sourceType string, cfg *config.Config) (Source, error) {
+	log := logger.New(logger.INFO)
+	log.Info("Creating new source of type: %s", sourceType)
+
 	switch sourceType {
-	case GoogleDrive:
+	case "google-drive":
 		return NewGoogleDriveSource(), nil
-	case FileSystem:
+	case "filesystem":
 		return NewFileSystemSource(), nil
-	case S3Bucket:
-		return nil, fmt.Errorf("S3 bucket source not implemented yet")
-	case GoogleStorage:
-		return nil, fmt.Errorf("Google Cloud Storage source not implemented yet")
+	case "s3":
+		bucket := os.Getenv("AWS_S3_BUCKET")
+		if bucket == "" {
+			return nil, fmt.Errorf("AWS_S3_BUCKET environment variable is required for S3 source")
+		}
+		return NewS3Source(bucket)
 	default:
-		return nil, fmt.Errorf("unknown source type: %s", sourceType)
+		return nil, fmt.Errorf("unsupported source type: %s", sourceType)
 	}
 }

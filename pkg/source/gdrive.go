@@ -27,6 +27,11 @@ func NewGoogleDriveSource() *GoogleDriveSource {
 	}
 }
 
+func (gds *GoogleDriveSource) GetName() string {
+//TODO
+	return "Google Drive"
+}
+
 // ListFiles implements the Source interface for Google Drive
 func (gds *GoogleDriveSource) ListFiles(startPath string) error {
 	gds.log.Debug("Starting Google Drive scan with path: %s", startPath)

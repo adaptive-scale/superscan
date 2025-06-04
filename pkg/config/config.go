@@ -11,6 +11,7 @@ import (
 // Config holds the application configuration
 type Config struct {
 	GoogleDrive GoogleDriveConfig `yaml:"google_drive,omitempty"`
+	S3         S3Config          `yaml:"s3,omitempty"`
 }
 
 // GoogleDriveConfig holds Google Drive specific configuration
@@ -18,6 +19,13 @@ type GoogleDriveConfig struct {
 	CredentialsFile string `yaml:"credentials_file"`
 	TokenFile      string `yaml:"token_file"`
 	StartPath      string `yaml:"start_path"`
+}
+
+// S3Config holds AWS S3 specific configuration
+type S3Config struct {
+	Bucket    string `yaml:"bucket"`
+	Region    string `yaml:"region"`
+	StartPath string `yaml:"start_path"`
 }
 
 // LoadConfig loads the configuration from a file or environment variable
@@ -48,6 +56,11 @@ func LoadConfig(configPath string) (*Config, error) {
 					TokenFile:      filepath.Join(configDir, "token.json"),
 					StartPath:      "root",
 				},
+				S3: S3Config{
+					Bucket:    "",
+					Region:    "us-east-1",
+					StartPath: "",
+				},
 			}
 			if err := SaveConfig(configPath, config); err != nil {
 				return nil, err
@@ -65,6 +78,16 @@ func LoadConfig(configPath string) (*Config, error) {
 	// Override credentials file path if environment variable is set
 	if credsPath := os.Getenv("SUPERSCAN_CONFIG_GOOGLE"); credsPath != "" {
 		config.GoogleDrive.CredentialsFile = credsPath
+	}
+
+	// Override S3 bucket if environment variable is set
+	if bucket := os.Getenv("AWS_S3_BUCKET"); bucket != "" {
+		config.S3.Bucket = bucket
+	}
+
+	// Override S3 region if environment variable is set
+	if region := os.Getenv("AWS_REGION"); region != "" {
+		config.S3.Region = region
 	}
 
 	return &config, nil

@@ -32,7 +32,7 @@ func main() {
 	}
 
 	// Create source
-	src, err := source.NewSource(sourceType)
+	src, err := source.NewSource(*sourceTypeStr, nil	)
 	if err != nil {
 		fmt.Printf("Error creating source: %v\n", err)
 		os.Exit(1)
