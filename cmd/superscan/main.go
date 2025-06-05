@@ -119,10 +119,11 @@ func main() {
 
 // downloadDirectoryTree downloads an entire directory tree while maintaining the structure
 func downloadDirectoryTree(src source.Source, sourcePath, destPath string, log *logger.Logger) {
-	// Get the file tree from the source first
+	// Phase 1: Build the tree structure
+	log.Info("Building directory tree...")
 	tree, err := src.GetFileTree(sourcePath)
 	if err != nil {
-		log.Error("Failed to get file tree: %v", err)
+		log.Error("Failed to build directory tree: %v", err)
 		return
 	}
 
@@ -131,50 +132,81 @@ func downloadDirectoryTree(src source.Source, sourcePath, destPath string, log *
 	displayTree(tree, 0)
 	fmt.Println() // Add a blank line for better readability
 
-	// First pass: Create all directory structures
+	// Phase 2: Create directory structure
 	log.Info("Creating directory structure...")
-	createDirectories(tree, destPath, log)
+	if err := createDirectories(tree, destPath, log); err != nil {
+		log.Error("Failed to create directory structure: %v", err)
+		return
+	}
+	log.Info("Directory structure created successfully")
+	fmt.Println() // Add a blank line for better readability
 
-	// Second pass: Download all files
-	log.Info("Downloading files...")
-	downloadFiles(tree, sourcePath, destPath, src, log)
+	// Phase 3: Download files
+	log.Info("Starting file downloads...")
+	if err := downloadFiles(tree, "", destPath, src, log); err != nil {
+		log.Error("Some files failed to download: %v", err)
+		return
+	}
+	log.Info("Download process completed")
 }
 
 // createDirectories recursively creates directory structure
-func createDirectories(node *source.FileNode, destBase string, log *logger.Logger) {
+func createDirectories(node *source.FileNode, destBase string, log *logger.Logger) error {
 	destPath := filepath.Join(destBase, node.Name)
 	if node.IsDir {
 		if err := os.MkdirAll(destPath, 0755); err != nil {
 			log.Error("Failed to create directory %s: %v", destPath, err)
-		} else {
-			log.Info("Created directory: %s", destPath)
+			return err
 		}
+		log.Info("Created directory: %s", destPath)
 	}
 
 	// Process children
 	for _, child := range node.Children {
-		createDirectories(child, destPath, log)
+		if err := createDirectories(child, destPath, log); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 // downloadFiles recursively downloads files
-func downloadFiles(node *source.FileNode, sourceBase, destBase string, src source.Source, log *logger.Logger) {
+func downloadFiles(node *source.FileNode, sourceBase, destBase string, src source.Source, log *logger.Logger) error {
 	if !node.IsDir {
-		// Download file
-		sourcePath := filepath.Join(sourceBase, node.Name)
+		// For files, use the current node's name
+		sourcePath := node.Name
+		if sourceBase != "" {
+			sourcePath = filepath.Join(sourceBase, node.Name)
+		}
+		sourcePath = filepath.Clean(sourcePath)
+		sourcePath = strings.ReplaceAll(sourcePath, "\\", "/") // Ensure forward slashes for S3
+		
 		destPath := filepath.Join(destBase, node.Name)
 		log.Info("Downloading: %s", sourcePath)
 		if err := src.DownloadFile(sourcePath, destPath); err != nil {
 			log.Error("Failed to download %s: %v", sourcePath, err)
-		} else {
-			log.Info("Successfully downloaded: %s", sourcePath)
+			return err
 		}
+		log.Info("Successfully downloaded: %s", sourcePath)
 	}
 
 	// Process children
 	for _, child := range node.Children {
-		downloadFiles(child, filepath.Join(sourceBase, node.Name), filepath.Join(destBase, node.Name), src, log)
+		// For children, use the current node's path as the base
+		childSourceBase := sourceBase
+		childDestBase := destBase
+		
+		// Only append the current node's name if it's not the root
+		if node.Name != "" {
+			childSourceBase = filepath.Join(sourceBase, node.Name)
+			childDestBase = filepath.Join(destBase, node.Name)
+		}
+		
+		if err := downloadFiles(child, childSourceBase, childDestBase, src, log); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 // displayTree recursively displays the tree structure with file sizes
