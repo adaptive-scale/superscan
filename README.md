@@ -1,182 +1,165 @@
 # SuperScan
 
-A fast and efficient file system scanner with support for multiple storage backends. Features an elegant ASCII tree display and comprehensive logging.
+SuperScan is a powerful file scanning and management tool that supports multiple storage backends including Google Drive, local filesystem, and AWS S3. It provides a beautiful ASCII tree visualization of your files and directories, making it easy to navigate and manage your files across different storage systems.
 
 ## Features
 
-- Multiple storage backends:
-  - Google Drive
-  - Local filesystem
-  - AWS S3
-  - Google Cloud Storage (coming soon)
-- ASCII tree visualization
+- Multiple storage backend support (Google Drive, Local Filesystem, AWS S3)
+- Beautiful ASCII tree visualization
+- Configurable starting paths
+- Environment variable support
 - YAML configuration
-- Structured logging
-- Memory-efficient scanning
+- Comprehensive logging system
+- Memory-efficient iterative scanning
+- File download functionality for all storage backends
 
-## Quick Start
+## Installation
+
+### Prerequisites
+
+- Go 1.16 or later
+- Google Cloud Platform account (for Google Drive)
+- AWS account (for S3)
+
+### Building from Source
 
 ```bash
-# Build
-make build
+# Clone the repository
+git clone https://github.com/adaptive-scale/superscan.git
+cd superscan
 
-# List local files
-./bin/superscan --source-type filesystem
+# Build using the build script
+./build.sh
 
-# List Google Drive files
-./bin/superscan --source-type google-drive
-
-# List S3 files
-./bin/superscan --source-type s3
+# Or build manually
+go build -o bin/superscan cmd/superscan/main.go
 ```
 
 ## Usage
 
-### Local Filesystem
+### Listing Files
+
+#### Google Drive
 
 ```bash
-# Current directory
-./bin/superscan --source-type filesystem
+# List files from Google Drive
+./bin/superscan --source google-drive
 
-# Specific directory
-./bin/superscan --source-type filesystem --start-path /path/to/dir
+# List files from a specific folder
+./bin/superscan --source google-drive --path "folder-id"
 ```
 
-Example output:
-```
-project/
-├── 📁 src/
-│   ├── 📄 main.go (1024 bytes)
-│   └── 📁 pkg/
-│       ├── 📄 config.go (512 bytes)
-│       └── 📄 utils.go (768 bytes)
-└── 📄 README.md (256 bytes)
-```
-
-### Google Drive
+#### Local Filesystem
 
 ```bash
-# Root directory
-./bin/superscan --source-type google-drive
+# List files from current directory
+./bin/superscan --source filesystem
 
-# Specific folder
-./bin/superscan --source-type google-drive --start-path "My Drive/Folder"
+# List files from a specific path
+./bin/superscan --source filesystem --path "/path/to/directory"
 ```
 
-Example output:
-```
-My Drive/
-├── 📁 Documents/
-│   ├── 📄 report.pdf (1024 bytes)
-│   └── 📁 Projects/
-│       ├── 📄 design.docx (512 bytes)
-│       └── 📄 notes.txt (256 bytes)
-└── 📁 Photos/
-    └── 📄 vacation.jpg (2048 bytes)
-```
-
-### AWS S3
+#### AWS S3
 
 ```bash
 # List files from S3 bucket
-./bin/superscan --source-type s3
+./bin/superscan --source s3 --path "prefix/"
 
-# List files from specific prefix
-./bin/superscan --source-type s3 --start-path "folder/subfolder"
+# List files from a specific prefix
+./bin/superscan --source s3 --path "folder/subfolder/"
 ```
 
-Example output:
+### Downloading Files
+
+#### Google Drive
+
+```bash
+# Download a file from Google Drive
+./bin/superscan --source google-drive --download "file-id" --destination "/path/to/save/file"
 ```
-my-bucket/
-├── 📁 folder/
-│   ├── 📄 file1.txt (1024 bytes)
-│   └── 📁 subfolder/
-│       ├── 📄 file2.txt (512 bytes)
-│       └── 📄 file3.txt (768 bytes)
-└── 📄 root-file.txt (256 bytes)
+
+#### Local Filesystem
+
+```bash
+# Download (copy) a file from local filesystem
+./bin/superscan --source filesystem --download "/path/to/file" --destination "/path/to/save/file"
+```
+
+#### AWS S3
+
+```bash
+# Download a file from S3
+./bin/superscan --source s3 --download "path/to/file" --destination "/path/to/save/file"
 ```
 
 ## Configuration
 
-Configuration file: `~/.superscan/config.yaml`
+### Environment Variables
+
+- `GOOGLE_APPLICATION_CREDENTIALS`: Path to Google Cloud credentials file
+- `AWS_S3_BUCKET`: S3 bucket name
+- `AWS_ACCESS_KEY_ID`: AWS access key
+- `AWS_SECRET_ACCESS_KEY`: AWS secret key
+- `AWS_REGION`: AWS region
+
+### YAML Configuration
+
+Create a `config.yaml` file in your home directory under `.superscan/`:
 
 ```yaml
 google_drive:
   credentials_file: /path/to/credentials.json
   token_file: /path/to/token.json
-  start_path: root
 
 s3:
-  bucket: my-bucket
-  region: us-east-1
-  start_path: ""
-```
-
-### Environment Variables
-
-- `SUPERSCAN_CONFIG_GOOGLE`: Path to Google Drive credentials
-- `AWS_S3_BUCKET`: S3 bucket name
-- `AWS_REGION`: AWS region (default: us-east-1)
-- `AWS_ACCESS_KEY_ID`: AWS access key
-- `AWS_SECRET_ACCESS_KEY`: AWS secret key
-
-## Google Drive Setup
-
-1. Go to [Google Cloud Console](https://console.cloud.google.com)
-2. Create/select project
-3. Enable Drive API
-4. Create OAuth 2.0 credentials
-5. Download as `credentials.json`
-
-## AWS S3 Setup
-
-1. Create an AWS account if you don't have one
-2. Create an S3 bucket
-3. Create an IAM user with S3 access
-4. Configure AWS credentials:
-   ```bash
-   export AWS_ACCESS_KEY_ID="your-access-key"
-   export AWS_SECRET_ACCESS_KEY="your-secret-key"
-   export AWS_REGION="your-region"
-   export AWS_S3_BUCKET="your-bucket-name"
-   ```
-
-## Development
-
-```bash
-# Build
-make build
-
-# Test
-make test
-
-# Lint
-make lint
+  bucket: your-bucket-name
+  region: your-region
+  access_key: your-access-key
+  secret_key: your-secret-key
 ```
 
 ## Project Structure
 
 ```
-superscan/
-├── bin/                    # Binaries
+.
+├── cmd/
+│   └── superscan/
+│       └── main.go
 ├── pkg/
-│   ├── config/            # Configuration
-│   ├── logger/            # Logging
-│   └── source/            # Storage backends
-├── .gitignore
+│   ├── config/
+│   │   └── config.go
+│   ├── logger/
+│   │   └── logger.go
+│   └── source/
+│       ├── source.go
+│       ├── gdrive.go
+│       ├── filesystem.go
+│       ├── s3.go
+│       └── node.go
+├── build.sh
 ├── go.mod
-├── LICENSE
+├── go.sum
 └── README.md
 ```
 
+## Logging
+
+The application uses a structured logging system with three levels:
+
+- DEBUG: Detailed information for debugging
+- INFO: General operational information
+- ERROR: Error conditions that need attention
+
+Logs include timestamps, log levels, and caller information.
+
 ## License
 
-MIT License - see [LICENSE](LICENSE)
+This project is licensed under the MIT License - see the LICENSE file for details.
 
 ## Contributing
 
-1. Fork
-2. Create feature branch
-3. Commit changes
-4. Push
-5. Open PR 
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request 

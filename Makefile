@@ -19,7 +19,7 @@ all: clean test build
 build:
 	@echo "Building $(BINARY_NAME) for $(GOOS)/$(GOARCH)..."
 	@mkdir -p $(BIN_DIR)
-	@$(GO) build -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/$(BINARY_NAME)
+	@$(GO) build -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/$(BINARY_NAME) cmd/superscan/main.go
 
 # Build for all platforms
 build-all:

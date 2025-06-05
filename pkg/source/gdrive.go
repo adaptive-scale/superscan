@@ -4,9 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"os"
+	"path/filepath"
+	"strings"
 
+	"github.com/adaptive-scale/superscan/pkg/config"
 	"github.com/adaptive-scale/superscan/pkg/logger"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
@@ -21,15 +25,20 @@ type GoogleDriveSource struct {
 }
 
 // NewGoogleDriveSource creates a new GoogleDriveSource
-func NewGoogleDriveSource() *GoogleDriveSource {
+func NewGoogleDriveSource(cfg *config.Config) (Source, error) {
 	return &GoogleDriveSource{
 		log: logger.New(logger.INFO),
-	}
+	}, nil
 }
 
 func (gds *GoogleDriveSource) GetName() string {
 //TODO
 	return "Google Drive"
+}
+
+// GetDescription returns the source description
+func (gds *GoogleDriveSource) GetDescription() string {
+	return "Google Drive Storage"
 }
 
 // ListFiles implements the Source interface for Google Drive
@@ -180,4 +189,141 @@ func saveToken(path string, token *oauth2.Token) {
 	}
 	defer f.Close()
 	json.NewEncoder(f).Encode(token)
+}
+
+// DownloadFile downloads a file from Google Drive to the local filesystem
+func (g *GoogleDriveSource) DownloadFile(filePath string, destination string) error {
+	g.log.Info("Downloading file from Google Drive: %s to %s", filePath, destination)
+
+	// Create destination directory if it doesn't exist
+	destDir := filepath.Dir(destination)
+	if err := os.MkdirAll(destDir, 0755); err != nil {
+		g.log.Error("Failed to create destination directory: %v", err)
+		return fmt.Errorf("failed to create destination directory: %v", err)
+	}
+
+	// Create destination file
+	destFile, err := os.Create(destination)
+	if err != nil {
+		g.log.Error("Failed to create destination file: %v", err)
+		return fmt.Errorf("failed to create destination file: %v", err)
+	}
+	defer destFile.Close()
+
+	// Download file content
+	resp, err := g.service.Files.Get(filePath).Download()
+	if err != nil {
+		g.log.Error("Failed to download file: %v", err)
+		return fmt.Errorf("failed to download file: %v", err)
+	}
+	defer resp.Body.Close()
+
+	// Copy file contents
+	_, err = io.Copy(destFile, resp.Body)
+	if err != nil {
+		g.log.Error("Failed to copy file contents: %v", err)
+		return fmt.Errorf("failed to copy file contents: %v", err)
+	}
+
+	g.log.Info("Successfully downloaded file to %s", destination)
+	return nil
+}
+
+// GetFileTree returns the file tree structure for the given path
+func (s *GoogleDriveSource) GetFileTree(path string) (*FileNode, error) {
+	// Create root node
+	root := &FileNode{
+		Name:     filepath.Base(path),
+		IsDir:    true,
+		Children: make([]*FileNode, 0),
+	}
+
+	// Get the root folder ID
+	folderID, err := s.getFolderID(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get folder ID: %v", err)
+	}
+
+	// Use a stack for iterative traversal
+	stack := []struct {
+		node     *FileNode
+		folderID string
+	}{
+		{root, folderID},
+	}
+
+	for len(stack) > 0 {
+		// Pop from stack
+		current := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+
+		// List files in current folder
+		files, err := s.service.Files.List().
+			Q(fmt.Sprintf("'%s' in parents and trashed = false", current.folderID)).
+			Fields("files(id, name, mimeType, size)").
+			Do()
+		if err != nil {
+			return nil, fmt.Errorf("failed to list files: %v", err)
+		}
+
+		// Process each file
+		for _, file := range files.Files {
+			isDir := file.MimeType == "application/vnd.google-apps.folder"
+			node := &FileNode{
+				Name:     file.Name,
+				IsDir:    isDir,
+				Size:     file.Size,
+				Children: make([]*FileNode, 0),
+			}
+
+			current.node.Children = append(current.node.Children, node)
+
+			// If it's a directory, add it to the stack
+			if isDir {
+				stack = append(stack, struct {
+					node     *FileNode
+					folderID string
+				}{node, file.Id})
+			}
+		}
+	}
+
+	return root, nil
+}
+
+// getFolderID returns the folder ID for the given path
+func (gds *GoogleDriveSource) getFolderID(path string) (string, error) {
+	// If path is empty or "root", return root folder ID
+	if path == "" || path == "root" {
+		return "root", nil
+	}
+
+	// Split path into components
+	parts := strings.Split(path, "/")
+	currentID := "root"
+
+	// Traverse the path
+	for _, part := range parts {
+		if part == "" {
+			continue
+		}
+
+		// Search for the folder
+		query := fmt.Sprintf("name = '%s' and mimeType = 'application/vnd.google-apps.folder' and '%s' in parents and trashed = false", part, currentID)
+		files, err := gds.service.Files.List().
+			Q(query).
+			Fields("files(id, name)").
+			Do()
+		if err != nil {
+			return "", fmt.Errorf("failed to search for folder %s: %v", part, err)
+		}
+
+		if len(files.Files) == 0 {
+			return "", fmt.Errorf("folder not found: %s", part)
+		}
+
+		currentID = files.Files[0].Id
+	}
+
+	return currentID, nil
 } 

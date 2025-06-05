@@ -8,89 +8,112 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Config holds the application configuration
+// Config represents the application configuration
 type Config struct {
-	GoogleDrive GoogleDriveConfig `yaml:"google_drive,omitempty"`
-	S3         S3Config          `yaml:"s3,omitempty"`
+	GoogleDrive struct {
+		CredentialsFile string `yaml:"credentials_file"`
+		TokenFile       string `yaml:"token_file"`
+	} `yaml:"google_drive"`
+
+	S3 struct {
+		Bucket    string `yaml:"bucket"`
+		Region    string `yaml:"region"`
+		AccessKey string `yaml:"access_key"`
+		SecretKey string `yaml:"secret_key"`
+	} `yaml:"s3"`
 }
 
-// GoogleDriveConfig holds Google Drive specific configuration
-type GoogleDriveConfig struct {
-	CredentialsFile string `yaml:"credentials_file"`
-	TokenFile      string `yaml:"token_file"`
-	StartPath      string `yaml:"start_path"`
-}
-
-// S3Config holds AWS S3 specific configuration
-type S3Config struct {
-	Bucket    string `yaml:"bucket"`
-	Region    string `yaml:"region"`
-	StartPath string `yaml:"start_path"`
-}
-
-// LoadConfig loads the configuration from a file or environment variable
-func LoadConfig(configPath string) (*Config, error) {
-	// If no config path is provided, use default
-	if configPath == "" {
-		homeDir, err := os.UserHomeDir()
-		if err != nil {
-			return nil, err
-		}
-		configPath = filepath.Join(homeDir, ".superscan", "config.yaml")
-	}
-
-	// Create config directory if it doesn't exist
-	configDir := filepath.Dir(configPath)
-	if err := os.MkdirAll(configDir, 0755); err != nil {
-		return nil, err
-	}
-
-	// Read config file
-	data, err := os.ReadFile(configPath)
+// Load loads the configuration from the config file
+func Load() (*Config, error) {
+	// Get home directory
+	homeDir, err := os.UserHomeDir()
 	if err != nil {
-		if os.IsNotExist(err) {
-			// Create default config if it doesn't exist
-			config := &Config{
-				GoogleDrive: GoogleDriveConfig{
-					CredentialsFile: filepath.Join(configDir, "credentials.json"),
-					TokenFile:      filepath.Join(configDir, "token.json"),
-					StartPath:      "root",
-				},
-				S3: S3Config{
-					Bucket:    "",
-					Region:    "us-east-1",
-					StartPath: "",
-				},
-			}
-			if err := SaveConfig(configPath, config); err != nil {
-				return nil, err
-			}
-			return config, nil
+		return nil, fmt.Errorf("failed to get home directory: %v", err)
+	}
+
+	// Construct config file path
+	configDir := filepath.Join(homeDir, ".superscan")
+	configFile := filepath.Join(configDir, "config.yaml")
+
+	// Create default config
+	config := &Config{}
+
+	// Check if config file exists
+	if _, err := os.Stat(configFile); os.IsNotExist(err) {
+		// Create config directory if it doesn't exist
+		if err := os.MkdirAll(configDir, 0755); err != nil {
+			return nil, fmt.Errorf("failed to create config directory: %v", err)
 		}
-		return nil, err
+
+		// Create default config file
+		if err := createDefaultConfig(configFile); err != nil {
+			return nil, fmt.Errorf("failed to create default config: %v", err)
+		}
+	} else {
+		// Read existing config file
+		data, err := os.ReadFile(configFile)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read config file: %v", err)
+		}
+
+		// Parse YAML
+		if err := yaml.Unmarshal(data, config); err != nil {
+			return nil, fmt.Errorf("failed to parse config file: %v", err)
+		}
 	}
 
-	var config Config
-	if err := yaml.Unmarshal(data, &config); err != nil {
-		return nil, fmt.Errorf("error parsing config file: %v", err)
-	}
-
-	// Override credentials file path if environment variable is set
-	if credsPath := os.Getenv("SUPERSCAN_CONFIG_GOOGLE"); credsPath != "" {
-		config.GoogleDrive.CredentialsFile = credsPath
-	}
-
-	// Override S3 bucket if environment variable is set
+	// Override with environment variables if set
 	if bucket := os.Getenv("AWS_S3_BUCKET"); bucket != "" {
 		config.S3.Bucket = bucket
 	}
-
-	// Override S3 region if environment variable is set
 	if region := os.Getenv("AWS_REGION"); region != "" {
 		config.S3.Region = region
 	}
+	if accessKey := os.Getenv("AWS_ACCESS_KEY_ID"); accessKey != "" {
+		config.S3.AccessKey = accessKey
+	}
+	if secretKey := os.Getenv("AWS_SECRET_ACCESS_KEY"); secretKey != "" {
+		config.S3.SecretKey = secretKey
+	}
+	if credsFile := os.Getenv("GOOGLE_APPLICATION_CREDENTIALS"); credsFile != "" {
+		config.GoogleDrive.CredentialsFile = credsFile
+	}
 
-	return &config, nil
+	return config, nil
+}
+
+// createDefaultConfig creates a default configuration file
+func createDefaultConfig(configFile string) error {
+	config := &Config{
+		GoogleDrive: struct {
+			CredentialsFile string `yaml:"credentials_file"`
+			TokenFile       string `yaml:"token_file"`
+		}{
+			CredentialsFile: filepath.Join(filepath.Dir(configFile), "credentials.json"),
+			TokenFile:       filepath.Join(filepath.Dir(configFile), "token.json"),
+		},
+		S3: struct {
+			Bucket    string `yaml:"bucket"`
+			Region    string `yaml:"region"`
+			AccessKey string `yaml:"access_key"`
+			SecretKey string `yaml:"secret_key"`
+		}{
+			Region: "us-east-1",
+		},
+	}
+
+	// Marshal to YAML
+	data, err := yaml.Marshal(config)
+	if err != nil {
+		return fmt.Errorf("failed to marshal default config: %v", err)
+	}
+
+	// Write to file
+	if err := os.WriteFile(configFile, data, 0644); err != nil {
+		return fmt.Errorf("failed to write default config: %v", err)
+	}
+
+	return nil
 }
 
 // SaveConfig saves the configuration to a file

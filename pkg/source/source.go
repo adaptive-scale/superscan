@@ -22,10 +22,22 @@ const (
 	GoogleStorage SourceType = "gcs"
 )
 
-// Source defines the interface for different storage backends
+// Source defines the interface for different file sources
 type Source interface {
-	ListFiles(startPath string) error
+	// ListFiles lists files in the given path
+	ListFiles(path string) error
+
+	// DownloadFile downloads a file from the source
+	DownloadFile(path string, destination string) error
+
+	// GetFileTree returns the file tree structure for the given path
+	GetFileTree(path string) (*FileNode, error)
+
+	// GetName returns the name of the source
 	GetName() string
+
+	// GetDescription returns the description of the source
+	GetDescription() string
 }
 
 // Set validates and sets the source type
@@ -51,9 +63,9 @@ func NewSource(sourceType string, cfg *config.Config) (Source, error) {
 
 	switch sourceType {
 	case "google-drive":
-		return NewGoogleDriveSource(), nil
+		return NewGoogleDriveSource(cfg)
 	case "filesystem":
-		return NewFileSystemSource(), nil
+		return NewFileSystemSource()
 	case "s3":
 		bucket := os.Getenv("AWS_S3_BUCKET")
 		if bucket == "" {
@@ -61,6 +73,6 @@ func NewSource(sourceType string, cfg *config.Config) (Source, error) {
 		}
 		return NewS3Source(bucket)
 	default:
-		return nil, fmt.Errorf("unsupported source type: %s", sourceType)
+		return nil, fmt.Errorf("unknown source type: %s", sourceType)
 	}
 }
